@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sui Counter dApp
 
-## Getting Started
+A full-stack decentralized application demonstrating Move smart contract development and integration with Next.js on the Sui blockchain.
 
-First, run the development server:
+🔗 **Live Demo**: [YOUR_VERCEL_URL_HERE]
 
+## 🎯 Overview
+
+This project showcases production-ready blockchain development skills, including:
+- Smart contract development in Move
+- Full-stack dApp architecture
+- Modern React/TypeScript patterns
+- Sui blockchain integration
+
+## 🛠️ Tech Stack
+
+**Frontend:**
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- React Hooks
+
+**Blockchain:**
+- Sui Move (Smart Contracts)
+- @mysten/sui.js (TypeScript SDK)
+- @mysten/dapp-kit (Wallet integration)
+
+**Infrastructure:**
+- Deployed on Vercel
+- Sui Testnet
+
+## ✨ Features
+
+- 🔗 **Wallet Integration**: Seamless Sui wallet connection
+- 📝 **Smart Contract Calls**: Execute Move functions (increment, decrement, reset)
+- 🔄 **Real-time Updates**: Automatic blockchain state synchronization
+- ⚡ **Transaction Handling**: Loading states, error handling, success feedback
+- 🎨 **Modern UI**: Responsive design with Tailwind CSS
+- 🔍 **Explorer Integration**: Direct links to view transactions on Sui Explorer
+
+## 📦 Smart Contract
+
+**Package ID**: `0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786`
+
+**Contract Features:**
+- Shared object pattern for multi-user access
+- Event emission for indexing
+- Gas-optimized operations
+
+**View on Explorer**: [Sui Explorer](https://suiscan.xyz/testnet/object/0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786)
+
+## 🚀 Quick Start
 ```bash
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/sui-counter-dapp.git
+cd sui-counter-dapp
+
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📝 Smart Contract Development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The Move contract is located in the `counter/` directory.
+```bash
+# Build contract
+cd counter
+sui move build
 
-## Learn More
+# Deploy to testnet
+sui client publish --gas-budget 100000000
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 🏗️ Architecture
+```
+Frontend (Next.js)
+    ↓
+Sui TypeScript SDK
+    ↓
+Sui RPC Node
+    ↓
+Move Smart Contract (Testnet)
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎓 What This Demonstrates
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**For Sui Foundation Solutions Engineer Role:**
 
-## Deploy on Vercel
+1. **Full-Stack Development**: Production-quality Next.js + TypeScript application
+2. **Move Smart Contracts**: Ability to write, deploy, and integrate Move contracts
+3. **Developer Tools**: Creating reference applications and demos
+4. **Best Practices**: Clean code, error handling, user experience focus
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 👤 Author
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Helia Marami**
+- Blockchain Engineer with 4+ years in DeFi
+- Experienced in cross-chain protocols, smart contract development, and full-stack dApps
+- LinkedIn: [your-linkedin]
+- GitHub: [@your-github]
+
+## 📄 License
+
+MIT License
