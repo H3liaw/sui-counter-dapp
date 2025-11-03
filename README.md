@@ -2,7 +2,7 @@
 
 A simple counter dApp built on Sui blockchain. Connect your wallet and increment, decrement, or reset the counter!
 
-🔗 **Try it live**: [https://sui-counter-dapp-heliiamarami-5742-helias-projects-d6ad3ad4.vercel.app](https://sui-counter-dapp-heliiamarami-5742-helias-projects-d6ad3ad4.vercel.app)
+🔗 **Try it live**: [https://sui-counter-dapp-heliiamarami-5742-helias-projects-d6ad3ad4.vercel.app?_vercel_share=DwygPSBEv3FjxMF48VPh890axSQRIPwv](https://sui-counter-dapp-heliiamarami-5742-helias-projects-d6ad3ad4.vercel.app?_vercel_share=DwygPSBEv3FjxMF48VPh890axSQRIPwv)
 
 ## What is this?
 
