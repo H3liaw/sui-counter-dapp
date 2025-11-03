@@ -42,7 +42,7 @@ sui move build
 sui client publish --gas-budget 100000000
 ```
 
-**Deployed Contract**: [View on Sui Explorer](https://suiscan.xyz/testnet/object/0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786)
+**Deployed Contract**: [View on Sui Explorer](https://suiscan.xyz/devnet/object/0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786)
 
 ## Tech Stack
 

@@ -7,10 +7,8 @@ import {
   useSuiClient,
 } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
-import { useState, useEffect } from 'react';
-
-const PACKAGE_ID = '0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786';
-const COUNTER_OBJECT_ID = '0x18dba5c61a165501253c14b6e82c327ab28b21c322e79ddc942346bf9468f717';
+import { useState, useEffect, useCallback } from 'react';
+import { PACKAGE_ID, COUNTER_OBJECT_ID } from './config';
 
 export default function Home() {
   const account = useCurrentAccount();
@@ -22,60 +20,197 @@ export default function Home() {
   const [status, setStatus] = useState('');
   const [digest, setDigest] = useState('');
   const [isDark, setIsDark] = useState(true);
+  const [myCounterId, setMyCounterId] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string>('0');
 
-  const fetchValue = async () => {
+  // Load user's counter ID from localStorage
+  useEffect(() => {
+    if (account) {
+      const stored = localStorage.getItem(`counter_${account.address}`);
+      if (stored) {
+        setMyCounterId(stored);
+      }
+    }
+  }, [account]);
+
+  const fetchBalance = useCallback(async () => {
+    if (!account) return;
     try {
+      const coins = await suiClient.getCoins({
+        owner: account.address,
+        coinType: '0x2::sui::SUI',
+      });
+      const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+      // Convert to SUI (1 SUI = 10^9 MIST)
+      const suiBalance = Number(totalBalance) / 1_000_000_000;
+      setBalance(suiBalance.toFixed(4));
+    } catch (e: unknown) {
+      console.error('Error fetching balance:', e);
+      setBalance('0');
+    }
+  }, [account, suiClient]);
+
+  const fetchValue = useCallback(async () => {
+    try {
+      const counterId = myCounterId || COUNTER_OBJECT_ID;
       const obj = await suiClient.getObject({
-        id: COUNTER_OBJECT_ID,
+        id: counterId,
         options: { showContent: true },
       });
       if (obj.data?.content?.dataType === 'moveObject') {
-        const fields = obj.data.content.fields as any;
-        setValue(Number(fields.value));
+        const fields = obj.data.content.fields as { value: string | number };
+        const numValue = Number(fields.value);
+        setValue(isNaN(numValue) ? 0 : numValue);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Error:', e);
+      // If using default counter fails, try user's counter
+      if (!myCounterId && account) {
+        const stored = localStorage.getItem(`counter_${account.address}`);
+        if (stored) {
+          setMyCounterId(stored);
+        }
+      }
     }
-  };
+  }, [myCounterId, account, suiClient]);
 
   useEffect(() => {
     fetchValue();
-    const interval = setInterval(fetchValue, 3000);
+    fetchBalance();
+    const interval = setInterval(() => {
+      fetchValue();
+      fetchBalance();
+    }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchValue, fetchBalance]);
 
-  const execute = (fn: string) => {
+  const createCounter = async () => {
     if (!account) {
       setStatus('Connect wallet first');
       return;
     }
     setLoading(true);
+    setStatus('Creating counter...');
+
+    try {
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.moveCall({
+        target: `${PACKAGE_ID}::counter::create`,
+        arguments: [],
+      });
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async (result) => {
+            // Wait a bit for the transaction to be processed
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Fetch the transaction to find the created counter object
+            try {
+              const txResult = await suiClient.getTransactionBlock({
+                digest: result.digest,
+                options: { showObjectChanges: true },
+              });
+              
+              const createdObject = txResult.objectChanges?.find(
+                (change: { type: string; objectType?: string; objectId?: string }) => 
+                  change.type === 'created' && change.objectType?.includes('Counter')
+              ) as { objectId: string } | undefined;
+              
+              if (createdObject?.objectId) {
+                const counterId = createdObject.objectId;
+                setMyCounterId(counterId);
+                localStorage.setItem(`counter_${account.address}`, counterId);
+                setStatus('Counter created successfully!');
+                setDigest(result.digest);
+                setTimeout(() => {
+                  fetchValue();
+                  setStatus('');
+                }, 2000);
+              } else {
+                setStatus('Counter created, but ID not found');
+              }
+            } catch {
+              setStatus('Counter created! Refreshing...');
+              setTimeout(() => {
+                fetchValue();
+                setStatus('');
+              }, 2000);
+            }
+            setLoading(false);
+          },
+          onError: (error) => {
+            console.error('Transaction error:', error);
+            const errorMessage = error.message || String(error);
+            if (errorMessage.includes('gas') || errorMessage.includes('coin') || errorMessage.includes('No valid')) {
+              setStatus('No SUI for gas. Get devnet tokens from the faucet!');
+            } else {
+              setStatus(`Error: ${errorMessage}`);
+            }
+            setLoading(false);
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error('Execution error:', error);
+      setStatus(`Error: ${error.message || 'Unknown error'}`);
+      setLoading(false);
+    }
+  };
+
+  const execute = async (fn: string) => {
+    if (!account) {
+      setStatus('Connect wallet first');
+      return;
+    }
+    
+    if (!myCounterId) {
+      setStatus('Please create your counter first!');
+      return;
+    }
+    
+    setLoading(true);
     setStatus('Submitting...');
 
-    const tx = new Transaction();
-    tx.moveCall({
-      target: `${PACKAGE_ID}::counter::${fn}`,
-      arguments: [tx.object(COUNTER_OBJECT_ID)],
-    });
+    try {
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.moveCall({
+        target: `${PACKAGE_ID}::counter::${fn}`,
+        arguments: [tx.object(myCounterId)],
+      });
 
-    signAndExecute(
-      { transaction: tx },
-      {
-        onSuccess: (result) => {
-          setStatus('Success!');
-          setDigest(result.digest);
-          setLoading(false);
-          setTimeout(() => {
-            fetchValue();
-            setStatus('');
-          }, 2000);
-        },
-        onError: (error) => {
-          setStatus(`Error: ${error.message}`);
-          setLoading(false);
-        },
-      }
-    );
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: (result) => {
+            setStatus('Success!');
+            setDigest(result.digest);
+            setLoading(false);
+            setTimeout(() => {
+              fetchValue();
+              setStatus('');
+            }, 2000);
+          },
+          onError: (error) => {
+            console.error('Transaction error:', error);
+            const errorMessage = error.message || String(error);
+            if (errorMessage.includes('gas') || errorMessage.includes('coin') || errorMessage.includes('No valid')) {
+              setStatus('No SUI for gas. Get devnet tokens from the faucet!');
+            } else {
+              setStatus(`Error: ${errorMessage}`);
+            }
+            setLoading(false);
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error('Execution error:', error);
+      setStatus(`Error: ${error.message || 'Unknown error'}`);
+      setLoading(false);
+    }
   };
 
   return (
@@ -159,7 +294,7 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-4">
                     <p className={`text-sm font-bold uppercase tracking-wider ${
                       isDark ? 'text-blue-100' : 'text-white'
-                    }`}>Wallet Balance</p>
+                    }`}>Counter Value</p>
                     <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                   </div>
                   <p className={`text-7xl md:text-8xl font-bold text-center ${
@@ -167,12 +302,44 @@ export default function Home() {
                       ? 'text-white' 
                       : 'text-white'
                   }`}>
-                    {value}
+                    {isNaN(value) ? 0 : value}
                   </p>
                 </div>
               </div>
               
               <div className="space-y-3">
+                {account && (
+                  <div className={`rounded-xl p-4 transition-colors ${
+                    isDark 
+                      ? 'bg-slate-800/50 border border-blue-500/20 hover:border-blue-500/40' 
+                      : 'bg-blue-50/80 border border-blue-300/50 hover:border-blue-400/70'
+                  }`}>
+                    <p className={`text-xs font-semibold mb-2 uppercase ${
+                      isDark ? 'text-blue-300' : 'text-blue-700'
+                    }`}>Wallet Balance</p>
+                    <div className="flex items-center justify-between">
+                      <p className={`font-bold text-lg ${
+                        isDark ? 'text-blue-100' : 'text-blue-900'
+                      }`}>
+                        {balance} SUI
+                      </p>
+                      {parseFloat(balance) < 0.001 && (
+                        <a
+                          href="https://discord.com/invite/sui"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`text-xs px-2 py-1 rounded ${
+                            isDark 
+                              ? 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30' 
+                              : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          }`}
+                        >
+                          Get SUI
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className={`rounded-xl p-4 transition-colors ${
                   isDark 
                     ? 'bg-slate-800/50 border border-blue-500/20 hover:border-blue-500/40' 
@@ -192,16 +359,23 @@ export default function Home() {
                 }`}>
                   <p className={`text-xs font-semibold mb-2 uppercase ${
                     isDark ? 'text-blue-300' : 'text-blue-700'
-                  }`}>Object ID</p>
+                  }`}>Counter ID</p>
                   <p className={`font-mono text-xs break-all ${
                     isDark ? 'text-blue-100' : 'text-blue-900'
-                  }`}>{COUNTER_OBJECT_ID}</p>
+                  }`}>
+                    {myCounterId || COUNTER_OBJECT_ID}
+                    {myCounterId && (
+                      <span className={`ml-2 text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                        (Your Counter)
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Right Column - Controls */}
-            <div>
+            <div className="flex flex-col justify-center">
               {!account ? (
                 <div className="text-center py-16 md:py-20">
                   <div className="mb-6">
@@ -215,22 +389,104 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <button
-                    onClick={() => execute('increment')}
-                    disabled={loading}
-                    className="w-full py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-700 transform transition-all duration-300 hover:scale-105 disabled:scale-100 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/70 hover:shadow-2xl hover:shadow-[0_0_40px_rgba(59,130,246,0.6)] disabled:shadow-none"
-                  >
-                    {loading ? 'Processing...' : 'Deposit +'}
-                  </button>
+                <div className="space-y-4 w-full">
+                  {!myCounterId ? (
+                    <button
+                      onClick={createCounter}
+                      disabled={loading}
+                      className="w-full py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-700 transform transition-all duration-300 hover:scale-105 disabled:scale-100 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/70 hover:shadow-2xl hover:shadow-[0_0_40px_rgba(168,85,247,0.6)] disabled:shadow-none"
+                    >
+                      {loading ? 'Creating...' : 'Create Your Counter'}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => execute('increment')}
+                        disabled={loading}
+                        className="w-full py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-700 transform transition-all duration-300 hover:scale-105 disabled:scale-100 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/70 hover:shadow-2xl hover:shadow-[0_0_40px_rgba(59,130,246,0.6)] disabled:shadow-none"
+                      >
+                        {loading ? 'Processing...' : 'Increase +'}
+                      </button>
 
-                  <button
-                    onClick={() => execute('decrement')}
-                    disabled={loading}
-                    className="w-full py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-slate-700 to-blue-900 hover:from-slate-800 hover:to-blue-950 disabled:from-gray-600 disabled:to-gray-700 transform transition-all duration-300 hover:scale-105 disabled:scale-100 shadow-lg shadow-blue-900/25 hover:shadow-blue-900/70 hover:shadow-2xl hover:shadow-[0_0_40px_rgba(30,58,138,0.6)] disabled:shadow-none"
-                  >
-                    {loading ? 'Processing...' : 'Withdraw −'}
-                  </button>
+                      <button
+                        onClick={() => execute('decrement')}
+                        disabled={loading}
+                        className="w-full py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-slate-700 to-blue-900 hover:from-slate-800 hover:to-blue-950 disabled:from-gray-600 disabled:to-gray-700 transform transition-all duration-300 hover:scale-105 disabled:scale-100 shadow-lg shadow-blue-900/25 hover:shadow-blue-900/70 hover:shadow-2xl hover:shadow-[0_0_40px_rgba(30,58,138,0.6)] disabled:shadow-none"
+                      >
+                        {loading ? 'Processing...' : 'Decrease −'}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Flying Tokens Animation */}
+                  {myCounterId && (() => {
+                    const tokens = [
+                      { name: 'SUI', color: isDark ? '#60a5fa' : '#2563eb', size: 12, isMain: true },
+                      { name: 'USDC', color: isDark ? '#3b82f6' : '#1e40af', size: 8, isMain: false },
+                      { name: 'USDT', color: isDark ? '#34d399' : '#059669', size: 8, isMain: false },
+                      { name: 'CETUS', color: isDark ? '#f59e0b' : '#d97706', size: 8, isMain: false },
+                      { name: 'MOVE', color: isDark ? '#a78bfa' : '#7c3aed', size: 8, isMain: false },
+                      { name: 'WETH', color: isDark ? '#8b5cf6' : '#6d28d9', size: 8, isMain: false },
+                      { name: 'BTC', color: isDark ? '#f97316' : '#ea580c', size: 8, isMain: false },
+                      { name: 'ETH', color: isDark ? '#6366f1' : '#4f46e5', size: 8, isMain: false },
+                    ];
+                    
+                    return (
+                      <div className="relative h-24 overflow-hidden rounded-xl mt-0 mb-0 border border-transparent">
+                        {tokens.map((token, i) => (
+                          <div
+                            key={i}
+                            className="absolute"
+                            style={{
+                              left: `${(i * 11.5) + 3}%`,
+                              bottom: '-10px',
+                              animationName: 'flyUp',
+                              animationDuration: `${3 + (i * 0.3)}s`,
+                              animationIterationCount: 'infinite',
+                              animationTimingFunction: 'ease-out',
+                              animationDelay: `${i * 0.4}s`,
+                            }}
+                          >
+                            <div style={{ color: token.color }}>
+                              <svg
+                                className={`opacity-80 drop-shadow-lg ${token.isMain ? 'animate-pulse' : ''}`}
+                                width={token.size * 4}
+                                height={token.size * 4}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                style={{
+                                  animationName: 'spin-slow',
+                                  animationDuration: `${2 + (i * 0.2)}s`,
+                                  animationTimingFunction: 'linear',
+                                  animationIterationCount: 'infinite',
+                                }}
+                              >
+                                <circle 
+                                  cx="12" 
+                                  cy="12" 
+                                  r={token.isMain ? "11" : "9"} 
+                                  stroke="currentColor" 
+                                  strokeWidth={token.isMain ? "2.5" : "2"} 
+                                  fill="currentColor" 
+                                  opacity={token.isMain ? "1" : "0.85"} 
+                                />
+                                <text
+                                  x="12"
+                                  y={token.isMain ? "16.5" : "15.5"}
+                                  textAnchor="middle"
+                                  fill="white"
+                                  fontSize={token.isMain ? "7" : "6"}
+                                  fontWeight="bold"
+                                >
+                                  {token.name}
+                                </text>
+                              </svg>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   {status && (
                     <div className={`mt-6 p-5 rounded-2xl backdrop-blur-sm ${
@@ -243,16 +499,37 @@ export default function Home() {
                           <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
+                        ) : status.includes('gas') || status.includes('faucet') ? (
+                          <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
                         ) : (
                           <svg className="w-6 h-6 text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
                         )}
-                        <p className={`font-semibold ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>{status}</p>
+                        <div className="flex-1">
+                          <p className={`font-semibold ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>{status}</p>
+                          {(status.includes('gas') || status.includes('faucet')) && (
+                            <a
+                              href="https://discord.com/invite/sui"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`mt-2 inline-flex items-center gap-2 text-sm underline transition-colors ${
+                                isDark ? 'text-yellow-300 hover:text-yellow-200' : 'text-yellow-700 hover:text-yellow-800'
+                              }`}
+                            >
+                              Get SUI from Discord faucet
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
                       </div>
                       {digest && (
                         <a
-                          href={'https://suiscan.xyz/testnet/tx/' + digest}
+                          href={'https://suiscan.xyz/devnet/tx/' + digest}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`mt-3 inline-flex items-center gap-2 text-sm underline transition-colors ${
@@ -288,7 +565,7 @@ export default function Home() {
           </h2>
           <div className="grid md:grid-cols-2 gap-6">
             <a 
-              href={`https://suiscan.xyz/testnet/object/${PACKAGE_ID}`} 
+              href={`https://suiscan.xyz/devnet/object/${PACKAGE_ID}`} 
               target="_blank" 
               rel="noopener noreferrer"
               className={`rounded-2xl p-6 transition-all duration-300 hover:scale-105 cursor-pointer block ${
