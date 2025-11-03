@@ -2,7 +2,7 @@
 
 A full-stack decentralized application demonstrating Move smart contract development and integration with Next.js on the Sui blockchain.
 
-🔗 **Live Demo**: [YOUR_VERCEL_URL_HERE]
+🔗 **Live Demo**: https://sui-counter-dapp-heliiamarami-5742-helias-projects-d6ad3ad4.vercel.app
 
 ## 🎯 Overview
 
@@ -15,7 +15,8 @@ This project showcases production-ready blockchain development skills, including
 ## 🛠️ Tech Stack
 
 **Frontend:**
-- Next.js 14 (App Router)
+- Next.js 16 (App Router)
+- React 19
 - TypeScript
 - Tailwind CSS
 - React Hooks
@@ -51,8 +52,8 @@ This project showcases production-ready blockchain development skills, including
 
 ## 🚀 Quick Start
 ```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/sui-counter-dapp.git
+# Clone repository (replace with your repo URL)
+git clone <repository-url>
 cd sui-counter-dapp
 
 # Install dependencies
@@ -66,23 +67,26 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📝 Smart Contract Development
 
-The Move contract is located in the `counter/` directory.
-```bash
-# Build contract
-cd counter
-sui move build
+The Move smart contract is deployed on Sui Testnet. To interact with the contract:
 
-# Deploy to testnet
+**Package ID**: `0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786`
+
+**Counter Object ID**: `0x18dba5c61a165501253c14b6e82c327ab28b21c322e79ddc942346bf9468f717`
+
+If you want to deploy your own counter contract:
+```bash
+# In your Move project directory
+sui move build
 sui client publish --gas-budget 100000000
 ```
 
 ## 🏗️ Architecture
 ```
-Frontend (Next.js)
+Frontend (Next.js 16)
     ↓
-Sui TypeScript SDK
+Sui TypeScript SDK (@mysten/dapp-kit)
     ↓
-Sui RPC Node
+Sui RPC Node (Testnet)
     ↓
 Move Smart Contract (Testnet)
 ```
@@ -101,8 +105,6 @@ Move Smart Contract (Testnet)
 **Helia Marami**
 - Blockchain Engineer with 4+ years in DeFi
 - Experienced in cross-chain protocols, smart contract development, and full-stack dApps
-- LinkedIn: [your-linkedin]
-- GitHub: [@your-github]
 
 ## 📄 License
 
