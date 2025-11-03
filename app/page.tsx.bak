@@ -1,0 +1,290 @@
+'use client';
+
+import {
+  ConnectButton,
+  useCurrentAccount,
+  useSignAndExecuteTransaction,
+  useSuiClient,
+} from '@mysten/dapp-kit';
+import { Transaction } from '@mysten/sui/transactions';
+import { useState, useEffect } from 'react';
+
+// 🚨 YOUR CONTRACT IDs
+const PACKAGE_ID = '0xbf8720ea69fed5f6b31eb70b4395554041b457cd14e61a053715949b2cd13786';
+const COUNTER_OBJECT_ID = '0x18dba5c61a165501253c14b6e82c327ab28b21c322e79ddc942346bf9468f717';
+
+export default function Home() {
+  const account = useCurrentAccount();
+  const suiClient = useSuiClient();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  const [value, setValue] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
+  const [digest, setDigest] = useState('');
+
+  const fetchValue = async () => {
+    try {
+      const obj = await suiClient.getObject({
+        id: COUNTER_OBJECT_ID,
+        options: { showContent: true },
+      });
+      if (obj.data?.content?.dataType === 'moveObject') {
+        const fields = obj.data.content.fields as any;
+        setValue(Number(fields.value));
+      }
+    } catch (e: any) {
+      console.error('Error fetching counter:', e);
+      if (e.message?.includes('deleted')) {
+        setStatus('⚠️ Counter object was deleted. Create a new one!');
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchValue();
+    const interval = setInterval(fetchValue, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const execute = (fn: string) => {
+    if (!account) {
+      setStatus('⚠️ Connect wallet first');
+      return;
+    }
+    setLoading(true);
+    setStatus('📤 Submitting transaction...');
+
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${PACKAGE_ID}::counter::${fn}`,
+      arguments: [tx.object(COUNTER_OBJECT_ID)],
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          setStatus('✅ Transaction successful!');
+          setDigest(result.digest);
+          setLoading(false);
+          setTimeout(() => {
+            fetchValue();
+            setStatus('');
+          }, 2000);
+        },
+        onError: (error) => {
+          setStatus(`❌ Error: ${error.message}`);
+          setLoading(false);
+        },
+      }
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Sui Counter dApp</h1>
+            <p className="text-sm text-gray-500">Built with Move & Next.js by Helia Marami</p>
+          </div>
+          <ConnectButton />
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-12">
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+            <p className="text-sm uppercase text-gray-500 text-center mb-4">
+              Current Counter Value
+            </p>
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-8 mb-6">
+              <p className="text-7xl font-bold text-white text-center tabular-nums">{value}</p>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs mb-1">Package ID</p>
+                
+                  href={`https://suiscan.xyz/testnet/object/${PACKAGE_ID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-blue-600 hover:underline break-all"
+                >
+                  {PACKAGE_ID}
+                </a>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs mb-1">Counter Object</p>
+                
+                  href={`https://suiscan.xyz/testnet/object/${COUNTER_OBJECT_ID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-blue-600 hover:underline break-all"
+                >
+                  {COUNTER_OBJECT_ID}
+                </a>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs mb-1">Network</p>
+                <p className="font-semibold text-gray-800">Sui Testnet</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Controls</h2>
+
+              {!account ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 mb-4">
+                    Connect your Sui wallet to interact with the counter
+                  </p>
+                  <div className="flex justify-center">
+                    <ConnectButton />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => execute('increment')}
+                    disabled={loading}
+                    className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700 active:scale-95 shadow-lg hover:shadow-xl'
+                    }`}
+                  >
+                    {loading ? '⏳ Processing...' : '➕ Increment (+1)'}
+                  </button>
+
+                  <button
+                    onClick={() => execute('decrement')}
+                    disabled={loading}
+                    className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700 active:scale-95 shadow-lg hover:shadow-xl'
+                    }`}
+                  >
+                    {loading ? '⏳ Processing...' : '➖ Decrement (-1)'}
+                  </button>
+
+                  <button
+                    onClick={() => execute('reset')}
+                    disabled={loading}
+                    className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-lg hover:shadow-xl'
+                    }`}
+                  >
+                    {loading ? '⏳ Processing...' : '🔄 Reset to 0'}
+                  </button>
+                </div>
+              )}
+
+              {status && (
+                <div
+                  className={`mt-4 p-4 rounded-lg text-sm ${
+                    status.includes('Error') || status.includes('⚠️')
+                      ? 'bg-red-50 text-red-800 border border-red-200'
+                      : status.includes('successful')
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-blue-50 text-blue-800 border border-blue-200'
+                  }`}
+                >
+                  <p className="font-medium">{status}</p>
+                  {digest && (
+                    
+                      href={`https://suiscan.xyz/testnet/tx/${digest}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs underline mt-1 block hover:opacity-80"
+                    >
+                      View transaction on explorer →
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h3 className="font-bold text-gray-800 mb-3">Tech Stack</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600">▸</span>
+                  <span className="text-gray-700">
+                    <strong>Frontend:</strong> Next.js 14 + TypeScript
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600">▸</span>
+                  <span className="text-gray-700">
+                    <strong>Smart Contract:</strong> Sui Move
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600">▸</span>
+                  <span className="text-gray-700">
+                    <strong>Styling:</strong> Tailwind CSS
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600">▸</span>
+                  <span className="text-gray-700">
+                    <strong>SDK:</strong> @mysten/dapp-kit
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-12 bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">Features Demonstrated</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🔗 Wallet Integration</h3>
+              <p className="text-sm text-gray-600">
+                Seamless Sui wallet connection and authentication
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">📝 Smart Contract Calls</h3>
+              <p className="text-sm text-gray-600">
+                Execute Move functions: increment, decrement, reset
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🔄 Real-time Updates</h3>
+              <p className="text-sm text-gray-600">
+                Automatic polling and UI updates from blockchain state
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">⚡ Transaction Handling</h3>
+              <p className="text-sm text-gray-600">
+                Loading states, error handling, and success feedback
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🎨 Modern UI/UX</h3>
+              <p className="text-sm text-gray-600">
+                Responsive design with Tailwind CSS and smooth interactions
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🔍 Explorer Integration</h3>
+              <p className="text-sm text-gray-600">
+                Direct links to view transactions and objects on Sui Explorer
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
